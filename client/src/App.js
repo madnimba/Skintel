@@ -126,20 +126,14 @@ function App() {
         setError(null);
       } catch (err) {
         console.error('Detailed initialization error:', err);
-        let errorMessage = 'Failed to initialize face detection: ';
-        
+        // Only set user-friendly error messages, suppress technical/internal errors
         if (err.message.includes('WebGL')) {
-          errorMessage += 'Your browser does not support WebGL, which is required for face detection. Please try a different browser.';
+          setError('Your browser does not support WebGL, which is required for face detection. Please try a different browser.');
         } else if (err.message.includes('Camera access')) {
-          errorMessage += 'Camera access denied or not available. Please ensure you have granted camera permissions.';
-        } else if (err.message.includes('Video element')) {
-          errorMessage += 'Video element not found. Please refresh the page.';
+          setError('Camera access denied or not available. Please ensure you have granted camera permissions.');
         } else {
-          errorMessage += err.message;
+          setError(''); // Suppress technical/internal errors
         }
-        
-        setError(errorMessage);
-        setDebugInfo(`Error: ${err.message}`);
       } finally {
         setIsLoading(false);
       }
@@ -364,19 +358,14 @@ function App() {
     <Container maxWidth="lg" sx={{ minHeight: '100vh', py: { xs: 2, md: 4 } }}>
       <Box sx={{ my: { xs: 2, md: 4 } }}>
         <Typography variant="h3" component="h1" gutterBottom align="center" sx={{ fontWeight: 700, letterSpacing: 1 }}>
-          BeautyCam - Real-time Face Analysis
+          Lunera - Real-time Skin Analysis
         </Typography>
         
         {error && (
           <Paper elevation={3} sx={{ p: 2, mb: 2, bgcolor: 'error.dark' }}>
-            <Typography color="error" align="center" gutterBottom>
+            <Typography sx={{ color: '#fff' }} align="center" gutterBottom>
               {error}
             </Typography>
-            {debugInfo && (
-              <Typography variant="body2" color="error.light" align="center">
-                Debug Info: {debugInfo}
-              </Typography>
-            )}
           </Paper>
         )}
         
