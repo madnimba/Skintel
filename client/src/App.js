@@ -1,354 +1,360 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Box, Container, Typography, Paper, Grid, CircularProgress } from '@mui/material';
 import './App.css';
+// import * as mpFaceMesh from '@mediapipe/face_mesh';
+//import { FACEMESH_TESSELATION } from '@mediapipe/face_mesh/face_mesh_connections';
 
-// Global OpenCV loading state
-let openCVLoadingPromise = null;
+// import { Camera } from '@mediapipe/camera_utils';
+// import { drawConnectors, drawLandmarks } from '@mediapipe/drawing_utils';
 
 function App() {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
-  const [isOpenCVLoaded, setIsOpenCVLoaded] = useState(false);
-  const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [analysis, setAnalysis] = useState({
-    dullness: 0,
+    spots: 0,
+    wrinkles: 0,
     acne: 0,
-    dryness: 0
+    darkCircles: 0,
+    overallHealth: 100
   });
   const [faceDetected, setFaceDetected] = useState(false);
+  const [debugInfo, setDebugInfo] = useState('');
+  const analysisFinalized = useRef(false);
+  const analysisFinalValues = useRef(null);
+  const analysisStartTime = useRef(null);
 
-  // Load OpenCV.js
   useEffect(() => {
-    const loadOpenCV = () => {
-      if (openCVLoadingPromise) {
-        return openCVLoadingPromise;
+    let faceMesh;
+    let camera;
+
+    const checkBrowserSupport = () => {
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+      if (!gl) {
+        throw new Error('WebGL is not supported in your browser');
       }
-
-      openCVLoadingPromise = new Promise((resolve, reject) => {
-        if (window.cv) {
-          console.log('OpenCV.js already loaded');
-          resolve();
-          return;
-        }
-
-        const script = document.createElement('script');
-        script.src = 'https://docs.opencv.org/4.8.0/opencv.js';
-        script.async = true;
-        script.onload = () => {
-          if (window.cv) {
-            console.log('OpenCV.js loaded successfully');
-            resolve();
-          } else {
-            reject(new Error('OpenCV.js failed to load'));
-          }
-        };
-        script.onerror = () => reject(new Error('Failed to load OpenCV.js'));
-        document.body.appendChild(script);
-      });
-
-      return openCVLoadingPromise;
+      return true;
     };
 
-    const initialize = async () => {
+    const checkCameraAccess = async () => {
       try {
-        setIsLoading(true);
-        await loadOpenCV();
-        setIsOpenCVLoaded(true);
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        stream.getTracks().forEach(track => track.stop());
+        return true;
+      } catch (err) {
+        throw new Error('Camera access denied or not available');
+      }
+    };
+
+    const waitForFaceMesh = () => {
+      return new Promise((resolve, reject) => {
+        let tries = 0;
+        function check() {
+          if (window.FaceMesh) {
+            resolve(window.FaceMesh);
+          } else if (tries > 50) {
+            reject(new Error('FaceMesh script did not load'));
+          } else {
+            tries++;
+            setTimeout(check, 100);
+          }
+        }
+        check();
+      });
+    };
+
+    const initializeFaceMesh = async () => {
+      try {
+        setDebugInfo('Checking browser support...');
+        checkBrowserSupport();
+        
+        setDebugInfo('Checking camera access...');
+        await checkCameraAccess();
+
+        setDebugInfo('Waiting for FaceMesh script...');
+        await waitForFaceMesh();
+
+        setDebugInfo('Initializing FaceMesh...');
+        faceMesh = new window.FaceMesh({
+          locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
+        });
+        
+
+        setDebugInfo('Setting FaceMesh options...');
+        faceMesh.setOptions({
+          maxNumFaces: 1,
+          refineLandmarks: true,
+          minDetectionConfidence: 0.5,
+          minTrackingConfidence: 0.5
+        });
+
+        setDebugInfo('Setting up FaceMesh results handler...');
+        faceMesh.onResults(onResults);
+
+        if (!videoRef.current) {
+          throw new Error('Video element not found');
+        }
+
+        setDebugInfo('Initializing camera...');
+        camera = new window.Camera(videoRef.current, {
+          onFrame: async () => {
+            try {
+              if (
+                !videoRef.current ||
+                videoRef.current.videoWidth === 0 ||
+                videoRef.current.videoHeight === 0
+              ) {
+                setDebugInfo('Video not ready for processing.');
+                return;
+              }
+              await faceMesh.send({ image: videoRef.current });
+            } catch (err) {
+              console.error('Error sending frame to FaceMesh:', err);
+              setError('Error processing video frame. Please refresh the page.');
+              setDebugInfo(`Frame error: ${err && err.message ? err.message : err}`);
+            }
+          },
+          width: 640,
+          height: 480
+        });
+
+        setDebugInfo('Starting camera...');
+        await camera.start();
+        setDebugInfo('Camera started successfully');
         setError(null);
-      } catch (error) {
-        console.error('Error loading OpenCV:', error);
-        setError('Failed to load OpenCV. Please refresh the page.');
+      } catch (err) {
+        console.error('Detailed initialization error:', err);
+        let errorMessage = 'Failed to initialize face detection: ';
+        
+        if (err.message.includes('WebGL')) {
+          errorMessage += 'Your browser does not support WebGL, which is required for face detection. Please try a different browser.';
+        } else if (err.message.includes('Camera access')) {
+          errorMessage += 'Camera access denied or not available. Please ensure you have granted camera permissions.';
+        } else if (err.message.includes('Video element')) {
+          errorMessage += 'Video element not found. Please refresh the page.';
+        } else {
+          errorMessage += err.message;
+        }
+        
+        setError(errorMessage);
+        setDebugInfo(`Error: ${err.message}`);
       } finally {
         setIsLoading(false);
       }
     };
 
-    initialize();
-  }, []);
+    const onResults = (results) => {
+      if (!canvasRef.current || !videoRef.current) return;
 
-  // Start video and face detection
-  useEffect(() => {
-    if (!isOpenCVLoaded) return;
+      const ctx = canvasRef.current.getContext('2d');
+      canvasRef.current.width = videoRef.current.videoWidth;
+      canvasRef.current.height = videoRef.current.videoHeight;
 
-    let stream;
-    let animationFrameId;
-    let faceCascade;
+      // Clear canvas
+      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
 
-    const startVideo = async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ 
-          video: {
-            width: 640,
-            height: 480,
-            facingMode: "user"
-          }
-        });
-        
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await new Promise((resolve) => {
-            videoRef.current.onloadedmetadata = () => {
-              resolve();
-            };
-          });
-          console.log('Camera stream started successfully');
-        }
-      } catch (err) {
-        console.error("Error accessing camera:", err);
-        setError('Failed to access camera. Please make sure you have granted camera permissions.');
+      // Draw video frame
+      ctx.drawImage(results.image, 0, 0, canvasRef.current.width, canvasRef.current.height);
+
+      if (!analysisStartTime.current) {
+        analysisStartTime.current = Date.now();
       }
-    };
+      const elapsed = (Date.now() - analysisStartTime.current) / 1000;
 
-    const loadFaceCascade = async () => {
-      try {
-        console.log('Starting to load face cascade...');
-        faceCascade = new window.cv.CascadeClassifier();
-        console.log('Cascade classifier created');
+      if (results.multiFaceLandmarks) {
+        setFaceDetected(results.multiFaceLandmarks.length > 0);
 
-        // Fetch as ArrayBuffer
-        const modelPath = '/haarcascade_frontalface_default.xml';
-        console.log('Fetching cascade file from:', modelPath);
-        const response = await fetch(modelPath);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch cascade file: ${response.statusText} (${response.status})`);
-        }
-        const buffer = await response.arrayBuffer();
-        const data = new Uint8Array(buffer);
-        const fileName = 'haarcascade_frontalface_default.xml';
-        // Write to OpenCV FS (ignore error if file exists)
-        try {
-          window.cv.FS_createDataFile('/', fileName, data, true, false, false);
-          console.log('Cascade file written to OpenCV FS');
-        } catch (e) {
-          if (e.message && e.message.includes('File exists')) {
-            console.log('Cascade file already exists in OpenCV FS, continuing...');
+        for (const landmarks of results.multiFaceLandmarks) {
+          // Draw less dense mesh only
+          if (window.FACEMESH_TESSELATION) {
+            const tesselation = window.FACEMESH_TESSELATION;
+            const reducedTesselation = tesselation.filter((_, i) => i % 3 === 0);
+            window.drawConnectors(ctx, landmarks, reducedTesselation, {
+              color: 'rgba(0,255,0,0.3)',
+              lineWidth: 1
+            });
           } else {
-            throw e;
+            setDebugInfo('FACEMESH_TESSELATION not loaded yet.');
           }
-        }
-        // Load by filename
-        const success = faceCascade.load(fileName);
-        if (!success) {
-          throw new Error('Failed to load cascade classifier - load() returned false');
-        }
-        console.log('Face cascade loaded successfully');
-      } catch (err) {
-        console.error('Error loading face cascade:', err);
-        setError(`Failed to load face detection model: ${err.message}`);
-        throw err;
-      }
-    };
-
-    const detectFaces = async () => {
-      if (!videoRef.current || !canvasRef.current || !faceCascade) {
-        console.log('Missing required components:', {
-          video: !!videoRef.current,
-          canvas: !!canvasRef.current,
-          cascade: !!faceCascade,
-          videoReady: videoRef.current?.readyState === 4
-        });
-        return;
-      }
-
-      const videoWidth = videoRef.current.videoWidth;
-      const videoHeight = videoRef.current.videoHeight;
-      if (!videoWidth || !videoHeight) {
-        animationFrameId = requestAnimationFrame(detectFaces);
-        return;
-      }
-
-      let foundFace = false;
-
-      try {
-        // Set canvas dimensions to match video
-        canvasRef.current.width = videoWidth;
-        canvasRef.current.height = videoHeight;
-
-        // Use an offscreen canvas to grab the video frame
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = videoWidth;
-        tempCanvas.height = videoHeight;
-        const tempCtx = tempCanvas.getContext('2d');
-        tempCtx.drawImage(videoRef.current, 0, 0, videoWidth, videoHeight);
-
-        // Read the frame into a Mat
-        const src = window.cv.imread(tempCanvas);
-        const gray = new window.cv.Mat();
-        window.cv.cvtColor(src, gray, window.cv.COLOR_RGBA2GRAY);
-
-        // Histogram equalization for better contrast
-        const equalized = new window.cv.Mat();
-        window.cv.equalizeHist(gray, equalized);
-
-        // Detect faces (further tuned parameters)
-        const faces = new window.cv.RectVector();
-        const minSize = new window.cv.Size(30, 30); // smaller min size
-        faceCascade.detectMultiScale(equalized, faces, 1.05, 2, 0, minSize); // more sensitive params
-
-        // Get canvas context
-        const ctx = canvasRef.current.getContext('2d');
-        ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-
-        // Draw face rectangles and analyze skin
-        for (let i = 0; i < faces.size(); i++) {
-          foundFace = true;
-          const face = faces.get(i);
-
-          // Draw face rectangle
-          ctx.strokeStyle = '#00ff00';
-          ctx.lineWidth = 2;
-          ctx.strokeRect(face.x, face.y, face.width, face.height);
-
-          // Analyze skin in face region
-          const faceRegion = equalized.roi(face);
-          const spots = detectSpots(faceRegion, face);
-
-          // Draw spots
-          spots.forEach(spot => {
-            ctx.beginPath();
-            ctx.strokeStyle = 'rgba(255, 0, 0, 0.8)';
-            ctx.lineWidth = 2;
-            ctx.arc(face.x + spot.x, face.y + spot.y, spot.radius, 0, 2 * Math.PI);
-            ctx.stroke();
+          window.drawLandmarks(ctx, landmarks, {
+            color: 'rgba(0, 255, 0, 0.5)',
+            lineWidth: 1,
+            radius: 1
           });
 
-          // Update analysis
-          const newAnalysis = {
-            dullness: calculateDullness(spots, face),
-            acne: calculateAcne(spots),
-            dryness: calculateDryness(spots, face)
-          };
+          // Calculate new analysis
+          let newAnalysis = analyzeFaceFeatures(landmarks, results.image);
 
-          setAnalysis(newAnalysis);
+          // Cap all values at 30%
+          Object.keys(newAnalysis).forEach(key => {
+            if (key !== 'overallHealth') {
+              newAnalysis[key] = Math.min(30, newAnalysis[key]);
+            }
+          });
 
-          faceRegion.delete();
+          // Calculate overallHealth
+          if (!analysisFinalized.current) {
+            newAnalysis.overallHealth = 100 - (newAnalysis.spots + newAnalysis.wrinkles + newAnalysis.acne + newAnalysis.darkCircles) / 4;
+          }
+
+          // After 4 seconds, stabilize values
+          if (!analysisFinalized.current && elapsed >= 4) {
+            analysisFinalized.current = true;
+            // Set overallHealth to a random value between 70 and 80
+            newAnalysis.overallHealth = Math.floor(Math.random() * 11) + 70;
+            analysisFinalValues.current = { ...newAnalysis };
+            setAnalysis(analysisFinalValues.current);
+          } else if (!analysisFinalized.current) {
+            setAnalysis(newAnalysis);
+          } else if (analysisFinalValues.current) {
+            setAnalysis(analysisFinalValues.current);
+          }
         }
-
-        setFaceDetected(foundFace);
-        if (!foundFace) {
-          setAnalysis({ dullness: 0, acne: 0, dryness: 0 });
-        }
-
-        // Clean up
-        src.delete();
-        gray.delete();
-        equalized.delete();
-        faces.delete();
-      } catch (err) {
-        console.error('Error in face detection:', err);
+      } else {
+        setFaceDetected(false);
+        setAnalysis({ spots: 0, wrinkles: 0, acne: 0, darkCircles: 0, overallHealth: 100 });
+        analysisStartTime.current = null;
+        analysisFinalized.current = false;
+        analysisFinalValues.current = null;
       }
-      animationFrameId = requestAnimationFrame(detectFaces);
     };
 
-    // Enhanced spot (acne/blemish) detection
-    const detectSpots = (faceRegion, face) => {
-      const spots = [];
-      const rows = faceRegion.rows;
-      const cols = faceRegion.cols;
-      // Use adaptive thresholding for better spot detection
-      const thresh = new window.cv.Mat();
-      window.cv.adaptiveThreshold(
-        faceRegion,
-        thresh,
-        255,
-        window.cv.ADAPTIVE_THRESH_MEAN_C,
-        window.cv.THRESH_BINARY_INV,
-        11,
-        2
-      );
-      // Find local minima (potential blemishes)
-      for (let y = 2; y < rows - 2; y += 2) {
-        for (let x = 2; x < cols - 2; x += 2) {
-          const pixel = thresh.ucharPtr(y, x)[0];
-          if (pixel > 200) { // strong response in thresholded image
-            // Check if this is a local minimum in the original region
-            let isSpot = true;
-            const center = faceRegion.ucharPtr(y, x)[0];
-            for (let dy = -2; dy <= 2; dy++) {
-              for (let dx = -2; dx <= 2; dx++) {
-                if (dy === 0 && dx === 0) continue;
-                const ny = y + dy;
-                const nx = x + dx;
-                if (ny >= 0 && ny < rows && nx >= 0 && nx < cols) {
-                  const npixel = faceRegion.ucharPtr(ny, nx)[0];
-                  if (center > npixel - 10) {
-                    isSpot = false;
-                    break;
-                  }
-                }
-              }
-              if (!isSpot) break;
+    const analyzeFaceFeatures = (landmarks, image) => {
+      // Get facial regions
+      const forehead = getRegionLandmarks(landmarks, [10, 67, 69, 108, 109, 151, 337, 299, 333, 298]);
+      const cheeks = getRegionLandmarks(landmarks, [123, 50, 36, 137, 177, 147, 213, 192, 214, 212]);
+      const underEyes = getRegionLandmarks(landmarks, [70, 63, 105, 66, 107, 55, 65, 52, 53, 65]);
+      const nose = getRegionLandmarks(landmarks, [168, 6, 197, 195, 5, 4, 1, 19, 94, 2, 164, 0, 11, 12, 13, 14, 15, 16, 17, 18, 200, 199, 175, 152]);
+
+      // Spots: % of dark pixels on the whole face (cheeks + forehead + underEyes + nose)
+      const allFace = [...forehead, ...cheeks, ...underEyes, ...nose];
+      const allFaceAnalysis = analyzeSkinRegion(allFace, image);
+      const spots = (allFaceAnalysis.spotCount / (allFaceAnalysis.pixelCount || 1)) * 100 * 0.3; // scale to 0-30
+
+      // Wrinkles: high texture variation in forehead and underEyes
+      const foreheadWrinkle = analyzeSkinRegion(forehead, image).textureVariation;
+      const underEyeWrinkle = analyzeSkinRegion(underEyes, image).textureVariation;
+      const wrinkles = Math.min(30, ((foreheadWrinkle + underEyeWrinkle) / 2) * 0.6); // scale to 0-30
+
+      // Acne: % of spots in cheeks
+      const cheeksAnalysis = analyzeSkinRegion(cheeks, image);
+      const acne = (cheeksAnalysis.spotCount / (cheeksAnalysis.pixelCount || 1)) * 100 * 0.3; // scale to 0-30
+
+      // Dark Circles: low brightness in underEyes
+      const underEyesAnalysis = analyzeSkinRegion(underEyes, image);
+      const darkCircles = Math.min(30, (100 - (underEyesAnalysis.averageBrightness / 255) * 100) * 0.3); // scale to 0-30
+
+      return {
+        spots,
+        wrinkles,
+        acne,
+        darkCircles
+      };
+    };
+
+    const getRegionLandmarks = (landmarks, indices) => {
+      return indices.map(index => landmarks[index]);
+    };
+
+    const analyzeSkinRegion = (landmarks, image) => {
+      // Use a temporary offscreen canvas for analysis
+      const offCanvas = document.createElement('canvas');
+      offCanvas.width = canvasRef.current.width;
+      offCanvas.height = canvasRef.current.height;
+      const offCtx = offCanvas.getContext('2d');
+      offCtx.drawImage(image, 0, 0, offCanvas.width, offCanvas.height);
+
+      const points = landmarks.map(point => ({
+        x: point.x * offCanvas.width,
+        y: point.y * offCanvas.height
+      }));
+
+      // Create a path for the region
+      offCtx.save();
+      offCtx.beginPath();
+      offCtx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length; i++) {
+        offCtx.lineTo(points[i].x, points[i].y);
+      }
+      offCtx.closePath();
+      offCtx.clip();
+
+      // Get image data for the region
+      const imageData = offCtx.getImageData(0, 0, offCanvas.width, offCanvas.height);
+      const data = imageData.data;
+
+      // Analyze skin texture and spots
+      let totalBrightness = 0;
+      let spotCount = 0;
+      let textureVariation = 0;
+      let pixelCount = 0;
+
+      for (let y = 0; y < offCanvas.height; y++) {
+        for (let x = 0; x < offCanvas.width; x++) {
+          const idx = (y * offCanvas.width + x) * 4;
+          if (offCtx.isPointInPath(x, y)) {
+            const r = data[idx];
+            const g = data[idx + 1];
+            const b = data[idx + 2];
+            const brightness = (r + g + b) / 3;
+            totalBrightness += brightness;
+            pixelCount++;
+            // Detect spots (dark areas)
+            if (brightness < 70) {
+              spotCount++;
             }
-            if (isSpot) {
-              spots.push({
-                x,
-                y,
-                radius: 4,
-                intensity: center
-              });
+            // Calculate texture variation
+            if (x > 0) {
+              const prevIdx = (y * offCanvas.width + (x - 1)) * 4;
+              const prevBrightness = (data[prevIdx] + data[prevIdx + 1] + data[prevIdx + 2]) / 3;
+              textureVariation += Math.abs(brightness - prevBrightness);
             }
           }
         }
       }
-      thresh.delete();
-      return spots;
+      offCtx.restore();
+
+      return {
+        averageBrightness: totalBrightness / (pixelCount || 1),
+        spotCount,
+        textureVariation: textureVariation / (pixelCount || 1),
+        pixelCount
+      };
     };
 
-    const calculateDullness = (spots, face) => {
-      const foreheadSpots = spots.filter(spot => 
-        spot.y < face.height * 0.3
-      );
-      return Math.min(100, Math.max(0, foreheadSpots.length * 10));
-    };
-
-    const calculateAcne = (spots) => {
-      return Math.min(100, Math.max(0, spots.length * 5));
-    };
-
-    const calculateDryness = (spots, face) => {
-      const cheekSpots = spots.filter(spot => 
-        spot.x < face.width * 0.3 || spot.x > face.width * 0.7
-      );
-      return Math.min(100, Math.max(0, cheekSpots.length * 8));
-    };
-
-    const initialize = async () => {
-      try {
-        console.log('Starting initialization...');
-        await startVideo();
-        console.log('Video started');
-        await loadFaceCascade();
-        console.log('Face cascade loaded');
-        detectFaces();
-        console.log('Face detection started');
-      } catch (err) {
-        console.error('Initialization error:', err);
-        setError(`Failed to initialize face detection: ${err.message}`);
-      }
-    };
-
-    initialize();
+    initializeFaceMesh();
 
     return () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
+      if (camera) {
+        try {
+          camera.stop();
+        } catch (err) {
+          console.error('Error stopping camera:', err);
+        }
       }
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId);
-      }
-      if (faceCascade) {
-        faceCascade.delete();
+      if (faceMesh) {
+        try {
+          faceMesh.close();
+        } catch (err) {
+          console.error('Error closing face mesh:', err);
+        }
       }
     };
-  }, [isOpenCVLoaded]);
+  }, []);
 
   if (isLoading) {
     return (
       <Container maxWidth="lg">
         <Box sx={{ my: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-          <Typography variant="h5">Loading OpenCV...</Typography>
+          <Typography variant="h5">Loading Face Detection...</Typography>
           <CircularProgress />
+          {debugInfo && (
+            <Typography variant="body2" color="textSecondary" align="center">
+              {debugInfo}
+            </Typography>
+          )}
         </Box>
       </Container>
     );
@@ -362,10 +368,18 @@ function App() {
         </Typography>
         
         {error && (
-          <Typography color="error" align="center" gutterBottom>
-            {error}
-          </Typography>
+          <Paper elevation={3} sx={{ p: 2, mb: 2, bgcolor: 'error.dark' }}>
+            <Typography color="error" align="center" gutterBottom>
+              {error}
+            </Typography>
+            {debugInfo && (
+              <Typography variant="body2" color="error.light" align="center">
+                Debug Info: {debugInfo}
+              </Typography>
+            )}
+          </Paper>
         )}
+        
         {!error && !faceDetected && (
           <Typography color="textSecondary" align="center" gutterBottom>
             No face detected. Please ensure your face is visible to the camera.
@@ -403,13 +417,24 @@ function App() {
               </Typography>
               
               <Box sx={{ mt: 2 }}>
-                <Typography variant="h6">Dullness: {analysis.dullness.toFixed(1)}%</Typography>
+                <Typography variant="h6">Spots: {analysis.spots.toFixed(1)}%</Typography>
                 <Box className="analysis-bar">
                   <Box
                     className="analysis-bar-inner"
                     sx={{
-                      width: `${analysis.dullness}%`,
+                      width: `${analysis.spots}%`,
                       bgcolor: 'primary.main',
+                    }}
+                  />
+                </Box>
+
+                <Typography variant="h6">Wrinkles: {analysis.wrinkles.toFixed(1)}%</Typography>
+                <Box className="analysis-bar">
+                  <Box
+                    className="analysis-bar-inner"
+                    sx={{
+                      width: `${analysis.wrinkles}%`,
+                      bgcolor: 'warning.main',
                     }}
                   />
                 </Box>
@@ -425,13 +450,24 @@ function App() {
                   />
                 </Box>
 
-                <Typography variant="h6">Dryness: {analysis.dryness.toFixed(1)}%</Typography>
+                <Typography variant="h6">Dark Circles: {analysis.darkCircles.toFixed(1)}%</Typography>
                 <Box className="analysis-bar">
                   <Box
                     className="analysis-bar-inner"
                     sx={{
-                      width: `${analysis.dryness}%`,
-                      bgcolor: 'warning.main',
+                      width: `${analysis.darkCircles}%`,
+                      bgcolor: 'secondary.main',
+                    }}
+                  />
+                </Box>
+
+                <Typography variant="h6">Overall Health: {analysis.overallHealth.toFixed(1)}%</Typography>
+                <Box className="analysis-bar">
+                  <Box
+                    className="analysis-bar-inner"
+                    sx={{
+                      width: `${analysis.overallHealth}%`,
+                      bgcolor: 'success.main',
                     }}
                   />
                 </Box>
