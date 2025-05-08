@@ -28,6 +28,7 @@ function App() {
   useEffect(() => {
     let faceMesh;
     let camera;
+    let mounted = true;
 
     const checkBrowserSupport = () => {
       const canvas = document.createElement('canvas');
@@ -67,6 +68,39 @@ function App() {
 
     const initializeFaceMesh = async () => {
       try {
+        // Wait for video element to be ready
+        if (!videoRef.current) {
+          setDebugInfo('Waiting for video element...');
+          console.log('Starting video element initialization check...');
+          await new Promise((resolve, reject) => {
+            const maxAttempts = 50; // 5 seconds total
+            let attempts = 0;
+            
+            const checkVideo = () => {
+              if (!mounted) {
+                console.log('Component unmounted during video check');
+                reject(new Error('Component unmounted'));
+                return;
+              }
+              
+              if (videoRef.current) {
+                console.log('Video element found after', attempts, 'attempts');
+                resolve();
+              } else if (attempts >= maxAttempts) {
+                console.error('Video element not found after', maxAttempts, 'attempts');
+                reject(new Error('Video element not found after maximum attempts'));
+              } else {
+                attempts++;
+                setTimeout(checkVideo, 100);
+              }
+            };
+            
+            checkVideo();
+          });
+        }
+
+        if (!mounted) return;
+
         setDebugInfo('Checking browser support...');
         checkBrowserSupport();
         
@@ -318,9 +352,16 @@ function App() {
       };
     };
 
-    initializeFaceMesh();
+    initializeFaceMesh().catch(err => {
+      if (mounted) {
+        console.error('Initialization error:', err);
+        setError(err.message);
+        setIsLoading(false);
+      }
+    });
 
     return () => {
+      mounted = false;
       if (camera) {
         try {
           camera.stop();
@@ -370,7 +411,7 @@ function App() {
         )}
         
         {!error && !faceDetected && (
-          <Typography color="textSecondary" align="center" gutterBottom>
+          <Typography sx={{ color: '#fff' }} align="center" gutterBottom>
             No face detected. Please ensure your face is visible to the camera.
           </Typography>
         )}
