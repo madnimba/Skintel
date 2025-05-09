@@ -93,10 +93,16 @@ function App() {
     const regions = { forehead: getRegion([10,67,69,108,109,151,337,299,333,298]), cheeks: getRegion([123,50,36,137,177,147,213,192,214,212]), underEyes: getRegion([70,63,105,66,107,55,65,52,53,65]), nose: getRegion([168,6,197,195,5,4,1,19,94,2,164,0,11,12,13,14,15,16,17,18,200,199,175,152]) };
     const all=Object.values(regions).flat(); const allA=analyzeRegion(all);
     return {
-      spots: (allA.spots/allA.count)*30,
-      wrinkles: Math.min(30,((analyzeRegion(regions.forehead).texVar+analyzeRegion(regions.underEyes).texVar)/2)*0.6),
-      acne: Math.min(30, ((analyzeRegion(regions.cheeks).spots/analyzeRegion(regions.cheeks).count)*30) + 1),
-      darkCircles: Math.min(30,(100-(analyzeRegion(regions.underEyes).avgB/255)*100)*0.3)
+      spots: Math.min(29.6, (allA.spots/allA.count)*30),
+      wrinkles: Math.max(3.4, Math.min(27, ((analyzeRegion(regions.forehead).texVar+analyzeRegion(regions.underEyes).texVar)/2)*0.6)),
+      acne: Math.min(5.1, ((analyzeRegion(regions.cheeks).spots/analyzeRegion(regions.cheeks).count)*30) + 1.7),
+      darkCircles: Math.max(10.6, Math.min(32.3, (100-(analyzeRegion(regions.underEyes).avgB/255)*100)*0.3)),
+      overallHealth: Math.max(70.7, Math.min(92, 100 - (
+        Math.min(30, (allA.spots/allA.count)*30) +
+        Math.max(3, Math.min(27, ((analyzeRegion(regions.forehead).texVar+analyzeRegion(regions.underEyes).texVar)/2)*0.6)) +
+        Math.min(5, ((analyzeRegion(regions.cheeks).spots/analyzeRegion(regions.cheeks).count)*30) + 1) +
+        Math.max(10, Math.min(32, (100-(analyzeRegion(regions.underEyes).avgB/255)*100)*0.3))
+      ) / 4))
     };
   };
 
