@@ -117,7 +117,13 @@ function App() {
         faceMesh.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:0.5,minTrackingConfidence:0.5});
         faceMesh.onResults(onResults);
         setDebugInfo('Starting camera…');
-        camera=new window.Camera(videoEl,{onFrame:async()=>{if(videoEl.videoWidth)await faceMesh.send({image:videoEl});},width:640,height:480});
+        camera=new window.Camera(videoEl,{
+          onFrame:async()=>{
+            if(videoEl.videoWidth)await faceMesh.send({image:videoEl});
+          },
+          width: Math.min(640, window.innerWidth),
+          height: Math.min(480, window.innerHeight)
+        });
         await camera.start();
         setDebugInfo('Detection running'); setError(null);
       } catch(e){ if(!cancelled) setError(e.message); }
@@ -156,7 +162,18 @@ function App() {
             {['spots','wrinkles','acne','darkCircles','overallHealth'].map(k=>(
               <Box key={k} sx={{mt:2}}>
                 <Typography variant="h6" sx={{mb:1}}>{`${k.charAt(0).toUpperCase()+k.slice(1)}: ${analysis[k].toFixed(1)}%`}</Typography>
-                <Box className="analysis-bar"><Box className="analysis-bar-inner" sx={{width:`${analysis[k]}%`}} /></Box>
+                <Box className="analysis-bar">
+                  <Box 
+                    className="analysis-bar-inner" 
+                    sx={{
+                      width: `${analysis[k]}%`,
+                      transition: 'width 0.3s ease-in-out',
+                      height: '20px',
+                      backgroundColor: '#4CAF50',
+                      borderRadius: '4px'
+                    }} 
+                  />
+                </Box>
               </Box>
             ))}
           </Paper>
