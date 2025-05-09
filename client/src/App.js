@@ -144,76 +144,32 @@ function App() {
         </Box>
       )}
 
-      <Box sx={{ 
-        display: 'flex', 
-        flexDirection: 'column', 
-        alignItems: 'center', 
-        mb: 3,
-        mt: -2
-      }}>
-        <img 
-          src="/lunera.png" 
-          alt="Lunera Logo" 
-          style={{ 
-            height: '80px', 
-            width: 'auto', 
-            marginBottom: '8px',
-            transform: 'translateY(-10px)'
-          }} 
-        />
-        <Typography variant="subtitle1" sx={{ mb: 0.5 }}>Skin Test by</Typography>
-        <Typography 
-          variant="subtitle1" 
-          sx={{ 
-            backgroundColor: '#F3E5F5',
-            color: '#C2185B',
-            padding: '2px 12px',
-            borderRadius: '4px',
-            fontWeight: 700,
-            letterSpacing: '0.5px',
-            fontFamily: 'inherit'
-          }}
-        >
-          Canto Manto
-        </Typography>
-      </Box>
+      <Typography variant="h3" align="center" gutterBottom>Lunera - Real-time Skin Analysis</Typography>
       {error && <Paper sx={{p:2,mb:3,backgroundColor:'error.dark'}}><Typography color="#fff" align="center">{error}</Typography></Paper>}
       {!error && !faceDetected && !isLoading && <Typography align="center" sx={{mb:2}}>No face detected. Please align yourself.</Typography>}
 
       <Grid container spacing={3} alignItems="stretch">
         <Grid item xs={12} md={6}>
-          <Paper sx={{position:'relative',height:{xs:320,md:520}}}>
+          <Paper sx={{position:'relative',height:{xs:300,md:500}}}>
             <video ref={videoRef} autoPlay playsInline muted style={{width:'100%',height:'100%',objectFit:'cover',transform:'scaleX(-1)'}} />
             <canvas ref={canvasRef} style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',transform:'scaleX(-1)',pointerEvents:'none'}} />
           </Paper>
         </Grid>
 
         <Grid item xs={12} md={6}>
-          <Paper sx={{p:1.5,height:{xs:220,md:320}}}>
-            <Typography variant="h6" sx={{mb:1, fontSize: '1.1rem'}}>Analysis Results</Typography>
+          <Paper sx={{p:3,height:{xs:300,md:500}}}>
+            <Typography variant="h5" gutterBottom>Analysis Results</Typography>
             {['spots','wrinkles','acne','darkCircles','overallHealth'].map(k=>(
-              <Box key={k} sx={{mt:0.5}}>
-                <Typography variant="body2" sx={{mb:0.5, fontSize: '0.9rem'}}>{`${k.charAt(0).toUpperCase()+k.slice(1)}: ${analysis[k].toFixed(1)}%`}</Typography>
+              <Box key={k} sx={{mt:2}}>
+                <Typography variant="h6" sx={{mb:1}}>{`${k.charAt(0).toUpperCase()+k.slice(1)}: ${analysis[k].toFixed(1)}%`}</Typography>
                 <Box className="analysis-bar">
                   <Box 
                     className="analysis-bar-inner" 
                     sx={{
                       width: `${analysis[k]}%`,
                       transition: 'width 0.3s ease-in-out',
-                      height: '14px',
-                      backgroundColor: k === 'overallHealth' 
-                        ? analysis[k] >= 70 ? '#4CAF50'
-                        : analysis[k] >= 50 ? '#FFC107'
-                        : '#F44336'
-                        : k === 'spots' ? '#FFB74D'
-                        : k === 'wrinkles' ? '#BA68C8'
-                        : k === 'acne' ? '#F48FB1'
-                        : '#64B5F6',
-                      backgroundImage: k === 'overallHealth' 
-                        ? analysis[k] >= 70 ? 'linear-gradient(45deg, #4CAF50, #81C784)'
-                        : analysis[k] >= 50 ? 'linear-gradient(45deg, #FFC107, #FFD54F)'
-                        : 'linear-gradient(45deg, #F44336, #E57373)'
-                        : 'none',
+                      height: '20px',
+                      backgroundColor: '#4CAF50',
                       borderRadius: '4px'
                     }} 
                   />
