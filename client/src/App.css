@@ -1,9 +1,16 @@
 body, #root {
   min-height: 100vh;
-  background: #101522;
+  background: url('../public/bg.jpg') no-repeat center center fixed;
+  background-size: cover;
   color: #f5f6fa;
   margin: 0;
   font-family: 'Roboto', Arial, sans-serif;
+}
+
+#root, .App {
+  min-height: 100vh;
+  width: 100vw;
+  background: transparent;
 }
 
 .MuiPaper-root {
