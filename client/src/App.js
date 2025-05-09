@@ -151,95 +151,120 @@ function App() {
       <Grid container spacing={3} alignItems="stretch">
         <Grid item xs={12}>
           <Paper sx={{
-            position: 'relative',
-            width: '100%',
-            aspectRatio: '4/3',
-            maxWidth: 640,
-            m: { xs: 1, md: '0 auto' },
-            maxHeight: { xs: 'calc(100vh - 32px)', md: 'none' },
-            background: '#000',
+            width: '100vw',
+            height: '100vh',
+            p: '5vw',
+            boxSizing: 'border-box',
+            background: 'transparent',
             overflow: 'hidden',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             boxShadow: 3
           }}>
-            <video ref={videoRef} autoPlay playsInline muted 
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                transform: 'scaleX(-1)',
-                position: 'absolute',
-                top: 0,
-                left: 0
-              }}
-            />
-            <canvas ref={canvasRef} 
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                transform: 'scaleX(-1)',
-                pointerEvents: 'none'
-              }}
-            />
-            {/* Analysis Circles Overlay */}
             <Box sx={{
-              position: 'absolute',
-              left: 0,
-              right: 0,
-              bottom: 16,
+              width: '100%',
+              height: '100%',
+              background: '#ffe4ec',
+              borderRadius: 4,
+              position: 'relative',
+              overflow: 'hidden',
               display: 'flex',
+              alignItems: 'center',
               justifyContent: 'center',
-              gap: 2,
-              zIndex: 5
             }}>
-              {[
-                { key: 'spots', label: 'Spots', color: '#29b6f6' },
-                { key: 'wrinkles', label: 'Wrinkles', color: '#66bb6a' },
-                { key: 'acne', label: 'Acne', color: '#ab47bc' },
-                { key: 'darkCircles', label: 'Dark', color: '#ffa726' },
-                { key: 'overallHealth', label: 'Health', color: '#ec407a' }
-              ].map(({key, label, color}) => (
-                <Box key={key} sx={{mx:1, textAlign:'center'}}>
-                  <Box sx={{
-                    position:'relative',
-                    display:'inline-flex',
-                    mb:0.5,
-                    borderRadius: '50%',
-                    background: 'rgba(20, 20, 30, 0.55)',
-                    boxShadow: '0 2px 8px 0 rgba(0,0,0,0.18)',
-                    p: 1
-                  }}>
-                    <CircularProgress 
-                      variant="determinate" 
-                      value={Math.max(0, Math.min(100, analysis[key]))} 
-                      size={56} 
-                      thickness={4.5}
-                      sx={{color: color, opacity: 0.7, background: 'transparent', borderRadius: '50%'}}
-                    />
+              <video ref={videoRef} autoPlay playsInline muted 
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  transform: 'scaleX(-1)'
+                }}
+              />
+              <canvas ref={canvasRef} 
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  transform: 'scaleX(-1)',
+                  pointerEvents: 'none',
+                  position: 'absolute',
+                  top: 0,
+                  left: 0
+                }}
+              />
+              {/* Analysis Circles Overlay */}
+              <Box sx={{
+                position: 'absolute',
+                left: 0,
+                right: 0,
+                bottom: { xs: 6, md: 16 },
+                display: 'flex',
+                justifyContent: 'center',
+                gap: { xs: 0.5, md: 2 },
+                zIndex: 5,
+                width: '100%',
+                flexWrap: 'nowrap',
+                pointerEvents: 'none',
+              }}>
+                {[
+                  { key: 'spots', label: 'Spots', color: '#29b6f6' },
+                  { key: 'wrinkles', label: 'Wrinkles', color: '#66bb6a' },
+                  { key: 'acne', label: 'Acne', color: '#ab47bc' },
+                  { key: 'darkCircles', label: 'Dark', color: '#ffa726' },
+                  { key: 'overallHealth', label: 'Health', color: '#ec407a' }
+                ].map(({key, label, color}) => (
+                  <Box key={key} sx={{mx:{xs:0.2,md:1}, textAlign:'center'}}>
                     <Box sx={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      height: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexDirection: 'column',
-                      color: '#fff',
-                      fontWeight: 700
+                      position:'relative',
+                      display:'inline-flex',
+                      mb:0.5,
+                      borderRadius: '50%',
+                      background: 'rgba(20, 20, 30, 0.55)',
+                      boxShadow: '0 2px 8px 0 rgba(0,0,0,0.18)',
+                      p: { xs: 0.5, md: 1 }
                     }}>
-                      <Typography variant="h5" sx={{fontWeight:700, fontSize: '1.5rem', lineHeight:1}}>{Math.round(analysis[key])}</Typography>
+                      <CircularProgress 
+                        variant="determinate" 
+                        value={Math.max(0, Math.min(100, analysis[key]))} 
+                        size={window.innerWidth < 600 ? 36 : 56}
+                        thickness={4.5}
+                        sx={{color: color, opacity: 0.7, background: 'transparent', borderRadius: '50%'}}
+                      />
+                      <Box sx={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexDirection: 'column',
+                        color: '#fff',
+                        fontWeight: 700
+                      }}>
+                        <Typography 
+                          variant={window.innerWidth < 600 ? 'subtitle1' : 'h5'} 
+                          sx={{fontWeight:700, fontSize: window.innerWidth < 600 ? '1rem' : '1.5rem', lineHeight:1}}
+                        >
+                          {Math.round(analysis[key])}
+                        </Typography>
+                      </Box>
                     </Box>
+                    <Typography 
+                      variant="caption" 
+                      sx={{
+                        color:'rgba(255,255,255,0.92)', 
+                        fontWeight:500, 
+                        textShadow:'0 1px 4px #000',
+                        fontSize: window.innerWidth < 600 ? '0.7rem' : '0.9rem'
+                      }}
+                    >
+                      {label}
+                    </Typography>
                   </Box>
-                  <Typography variant="caption" sx={{color:'rgba(255,255,255,0.92)', fontWeight:500, textShadow:'0 1px 4px #000'}}>{label}</Typography>
-                </Box>
-              ))}
+                ))}
+              </Box>
             </Box>
           </Paper>
         </Grid>
