@@ -28,7 +28,7 @@ function App() {
   useEffect(() => {
     let faceMesh;
     let camera;
-    let mounted = true;
+    let cancelled = false;
 
     const checkBrowserSupport = () => {
       const canvas = document.createElement('canvas');
@@ -68,38 +68,12 @@ function App() {
 
     const initializeFaceMesh = async () => {
       try {
-        // Wait for video element to be ready
-        if (!videoRef.current) {
-          setDebugInfo('Waiting for video element...');
-          console.log('Starting video element initialization check...');
-          await new Promise((resolve, reject) => {
-            const maxAttempts = 50; // 5 seconds total
-            let attempts = 0;
-            
-            const checkVideo = () => {
-              if (!mounted) {
-                console.log('Component unmounted during video check');
-                reject(new Error('Component unmounted'));
-                return;
-              }
-              
-              if (videoRef.current) {
-                console.log('Video element found after', attempts, 'attempts');
-                resolve();
-              } else if (attempts >= maxAttempts) {
-                console.error('Video element not found after', maxAttempts, 'attempts');
-                reject(new Error('Video element not found after maximum attempts'));
-              } else {
-                attempts++;
-                setTimeout(checkVideo, 100);
-              }
-            };
-            
-            checkVideo();
-          });
+        setDebugInfo('Waiting for video element...');
+        // Wait until videoRef.current is set or cancelled
+        while (!videoRef.current && !cancelled) {
+          await new Promise(r => setTimeout(r, 50));
         }
-
-        if (!mounted) return;
+        if (cancelled) return;
 
         setDebugInfo('Checking browser support...');
         checkBrowserSupport();
@@ -114,7 +88,6 @@ function App() {
         faceMesh = new window.FaceMesh({
           locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`,
         });
-        
 
         setDebugInfo('Setting FaceMesh options...');
         faceMesh.setOptions({
@@ -128,7 +101,8 @@ function App() {
         faceMesh.onResults(onResults);
 
         if (!videoRef.current) {
-          throw new Error('Video element not found');
+          setError('Video element not found');
+          return;
         }
 
         setDebugInfo('Initializing camera...');
@@ -145,7 +119,6 @@ function App() {
               }
               await faceMesh.send({ image: videoRef.current });
             } catch (err) {
-              console.error('Error sending frame to FaceMesh:', err);
               setError('Error processing video frame. Please refresh the page.');
               setDebugInfo(`Frame error: ${err && err.message ? err.message : err}`);
             }
@@ -159,60 +132,87 @@ function App() {
         setDebugInfo('Camera started successfully');
         setError(null);
       } catch (err) {
-        console.error('Detailed initialization error:', err);
-        // Only set user-friendly error messages, suppress technical/internal errors
         if (err.message.includes('WebGL')) {
           setError('Your browser does not support WebGL, which is required for face detection. Please try a different browser.');
         } else if (err.message.includes('Camera access')) {
           setError('Camera access denied or not available. Please ensure you have granted camera permissions.');
         } else {
-          setError(''); // Suppress technical/internal errors
+          setError(err.message);
         }
       } finally {
         setIsLoading(false);
       }
     };
 
-    const onResults = (results) => {
-      if (!canvasRef.current || !videoRef.current) return;
+    initializeFaceMesh();
 
-      const ctx = canvasRef.current.getContext('2d');
-      canvasRef.current.width = videoRef.current.videoWidth;
-      canvasRef.current.height = videoRef.current.videoHeight;
-
-      // Clear canvas
-      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-
-      // Draw video frame
-      ctx.drawImage(results.image, 0, 0, canvasRef.current.width, canvasRef.current.height);
-
-      if (!analysisStartTime.current) {
-        analysisStartTime.current = Date.now();
+    return () => {
+      cancelled = true;
+      if (camera) {
+        try {
+          camera.stop();
+        } catch (err) {
+          // ignore
+        }
       }
-      const elapsed = (Date.now() - analysisStartTime.current) / 1000;
+      if (faceMesh) {
+        try {
+          faceMesh.close();
+        } catch (err) {
+          // ignore
+        }
+      }
+    };
+  }, []);
 
-      if (results.multiFaceLandmarks) {
-        setFaceDetected(results.multiFaceLandmarks.length > 0);
+  // Add a separate effect to handle video element mounting
+  useEffect(() => {
+    if (videoRef.current) {
+      console.log('Video element mounted:', videoRef.current);
+    }
+  }, [videoRef.current]);
 
-        for (const landmarks of results.multiFaceLandmarks) {
-          // Draw less dense mesh only
-          if (window.FACEMESH_TESSELATION) {
-            const tesselation = window.FACEMESH_TESSELATION;
-            const reducedTesselation = tesselation.filter((_, i) => i % 3 === 0);
-            window.drawConnectors(ctx, landmarks, reducedTesselation, {
-              color: 'rgba(0,255,0,0.3)',
-              lineWidth: 1
-            });
-          } else {
-            setDebugInfo('FACEMESH_TESSELATION not loaded yet.');
-          }
-          window.drawLandmarks(ctx, landmarks, {
-            color: 'rgba(0, 255, 0, 0.5)',
-            lineWidth: 1,
-            radius: 1
+  const onResults = (results) => {
+    if (!canvasRef.current || !videoRef.current) return;
+
+    const ctx = canvasRef.current.getContext('2d');
+    canvasRef.current.width = videoRef.current.videoWidth;
+    canvasRef.current.height = videoRef.current.videoHeight;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+
+    // Draw video frame
+    ctx.drawImage(results.image, 0, 0, canvasRef.current.width, canvasRef.current.height);
+
+    if (!analysisStartTime.current) {
+      analysisStartTime.current = Date.now();
+    }
+    const elapsed = (Date.now() - analysisStartTime.current) / 1000;
+
+    if (results.multiFaceLandmarks) {
+      setFaceDetected(results.multiFaceLandmarks.length > 0);
+
+      for (const landmarks of results.multiFaceLandmarks) {
+        // Draw less dense mesh only
+        if (window.FACEMESH_TESSELATION) {
+          const tesselation = window.FACEMESH_TESSELATION;
+          const reducedTesselation = tesselation.filter((_, i) => i % 3 === 0);
+          window.drawConnectors(ctx, landmarks, reducedTesselation, {
+            color: 'rgba(0,255,0,0.3)',
+            lineWidth: 1
           });
+        } else {
+          setDebugInfo('FACEMESH_TESSELATION not loaded yet.');
+        }
+        window.drawLandmarks(ctx, landmarks, {
+          color: 'rgba(0, 255, 0, 0.5)',
+          lineWidth: 1,
+          radius: 1
+        });
 
-          // Calculate new analysis
+        // Calculate new analysis only every 5 frames
+        if (Math.floor(Date.now() / 100) % 10 === 0) {
           let newAnalysis = analyzeFaceFeatures(landmarks, results.image);
 
           // Cap all values at 30%
@@ -240,144 +240,119 @@ function App() {
             setAnalysis(analysisFinalValues.current);
           }
         }
-      } else {
-        setFaceDetected(false);
-        setAnalysis({ spots: 0, wrinkles: 0, acne: 0, darkCircles: 0, overallHealth: 100 });
-        analysisStartTime.current = null;
-        analysisFinalized.current = false;
-        analysisFinalValues.current = null;
+        
       }
+    } else {
+      setFaceDetected(false);
+      setAnalysis({ spots: 0, wrinkles: 0, acne: 0, darkCircles: 0, overallHealth: 100 });
+      analysisStartTime.current = null;
+      analysisFinalized.current = false;
+      analysisFinalValues.current = null;
+    }
+  };
+
+  const analyzeFaceFeatures = (landmarks, image) => {
+    // Get facial regions
+    const forehead = getRegionLandmarks(landmarks, [10, 67, 69, 108, 109, 151, 337, 299, 333, 298]);
+    const cheeks = getRegionLandmarks(landmarks, [123, 50, 36, 137, 177, 147, 213, 192, 214, 212]);
+    const underEyes = getRegionLandmarks(landmarks, [70, 63, 105, 66, 107, 55, 65, 52, 53, 65]);
+    const nose = getRegionLandmarks(landmarks, [168, 6, 197, 195, 5, 4, 1, 19, 94, 2, 164, 0, 11, 12, 13, 14, 15, 16, 17, 18, 200, 199, 175, 152]);
+
+    // Spots: % of dark pixels on the whole face (cheeks + forehead + underEyes + nose)
+    const allFace = [...forehead, ...cheeks, ...underEyes, ...nose];
+    const allFaceAnalysis = analyzeSkinRegion(allFace, image);
+    const spots = (allFaceAnalysis.spotCount / (allFaceAnalysis.pixelCount || 1)) * 100 * 0.3; // scale to 0-30
+
+    // Wrinkles: high texture variation in forehead and underEyes
+    const foreheadWrinkle = analyzeSkinRegion(forehead, image).textureVariation;
+    const underEyeWrinkle = analyzeSkinRegion(underEyes, image).textureVariation;
+    const wrinkles = Math.min(30, ((foreheadWrinkle + underEyeWrinkle) / 2) * 0.6); // scale to 0-30
+
+    // Acne: % of spots in cheeks
+    const cheeksAnalysis = analyzeSkinRegion(cheeks, image);
+    const acne = (cheeksAnalysis.spotCount / (cheeksAnalysis.pixelCount || 1)) * 100 * 0.3; // scale to 0-30
+
+    // Dark Circles: low brightness in underEyes
+    const underEyesAnalysis = analyzeSkinRegion(underEyes, image);
+    const darkCircles = Math.min(30, (100 - (underEyesAnalysis.averageBrightness / 255) * 100) * 0.3); // scale to 0-30
+
+    return {
+      spots,
+      wrinkles,
+      acne,
+      darkCircles
     };
+  };
 
-    const analyzeFaceFeatures = (landmarks, image) => {
-      // Get facial regions
-      const forehead = getRegionLandmarks(landmarks, [10, 67, 69, 108, 109, 151, 337, 299, 333, 298]);
-      const cheeks = getRegionLandmarks(landmarks, [123, 50, 36, 137, 177, 147, 213, 192, 214, 212]);
-      const underEyes = getRegionLandmarks(landmarks, [70, 63, 105, 66, 107, 55, 65, 52, 53, 65]);
-      const nose = getRegionLandmarks(landmarks, [168, 6, 197, 195, 5, 4, 1, 19, 94, 2, 164, 0, 11, 12, 13, 14, 15, 16, 17, 18, 200, 199, 175, 152]);
+  const getRegionLandmarks = (landmarks, indices) => {
+    return indices.map(index => landmarks[index]);
+  };
 
-      // Spots: % of dark pixels on the whole face (cheeks + forehead + underEyes + nose)
-      const allFace = [...forehead, ...cheeks, ...underEyes, ...nose];
-      const allFaceAnalysis = analyzeSkinRegion(allFace, image);
-      const spots = (allFaceAnalysis.spotCount / (allFaceAnalysis.pixelCount || 1)) * 100 * 0.3; // scale to 0-30
+  const analyzeSkinRegion = (landmarks, image) => {
+    // Use a temporary offscreen canvas for analysis
+    const offCanvas = document.createElement('canvas');
+    offCanvas.width = canvasRef.current.width;
+    offCanvas.height = canvasRef.current.height;
+    const offCtx = offCanvas.getContext('2d');
+    offCtx.drawImage(image, 0, 0, offCanvas.width, offCanvas.height);
 
-      // Wrinkles: high texture variation in forehead and underEyes
-      const foreheadWrinkle = analyzeSkinRegion(forehead, image).textureVariation;
-      const underEyeWrinkle = analyzeSkinRegion(underEyes, image).textureVariation;
-      const wrinkles = Math.min(30, ((foreheadWrinkle + underEyeWrinkle) / 2) * 0.6); // scale to 0-30
+    const points = landmarks.map(point => ({
+      x: point.x * offCanvas.width,
+      y: point.y * offCanvas.height
+    }));
 
-      // Acne: % of spots in cheeks
-      const cheeksAnalysis = analyzeSkinRegion(cheeks, image);
-      const acne = (cheeksAnalysis.spotCount / (cheeksAnalysis.pixelCount || 1)) * 100 * 0.3; // scale to 0-30
+    // Create a path for the region
+    offCtx.save();
+    offCtx.beginPath();
+    offCtx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) {
+      offCtx.lineTo(points[i].x, points[i].y);
+    }
+    offCtx.closePath();
+    offCtx.clip();
 
-      // Dark Circles: low brightness in underEyes
-      const underEyesAnalysis = analyzeSkinRegion(underEyes, image);
-      const darkCircles = Math.min(30, (100 - (underEyesAnalysis.averageBrightness / 255) * 100) * 0.3); // scale to 0-30
+    // Get image data for the region
+    const imageData = offCtx.getImageData(0, 0, offCanvas.width, offCanvas.height);
+    const data = imageData.data;
 
-      return {
-        spots,
-        wrinkles,
-        acne,
-        darkCircles
-      };
-    };
+    // Analyze skin texture and spots
+    let totalBrightness = 0;
+    let spotCount = 0;
+    let textureVariation = 0;
+    let pixelCount = 0;
 
-    const getRegionLandmarks = (landmarks, indices) => {
-      return indices.map(index => landmarks[index]);
-    };
-
-    const analyzeSkinRegion = (landmarks, image) => {
-      // Use a temporary offscreen canvas for analysis
-      const offCanvas = document.createElement('canvas');
-      offCanvas.width = canvasRef.current.width;
-      offCanvas.height = canvasRef.current.height;
-      const offCtx = offCanvas.getContext('2d');
-      offCtx.drawImage(image, 0, 0, offCanvas.width, offCanvas.height);
-
-      const points = landmarks.map(point => ({
-        x: point.x * offCanvas.width,
-        y: point.y * offCanvas.height
-      }));
-
-      // Create a path for the region
-      offCtx.save();
-      offCtx.beginPath();
-      offCtx.moveTo(points[0].x, points[0].y);
-      for (let i = 1; i < points.length; i++) {
-        offCtx.lineTo(points[i].x, points[i].y);
-      }
-      offCtx.closePath();
-      offCtx.clip();
-
-      // Get image data for the region
-      const imageData = offCtx.getImageData(0, 0, offCanvas.width, offCanvas.height);
-      const data = imageData.data;
-
-      // Analyze skin texture and spots
-      let totalBrightness = 0;
-      let spotCount = 0;
-      let textureVariation = 0;
-      let pixelCount = 0;
-
-      for (let y = 0; y < offCanvas.height; y++) {
-        for (let x = 0; x < offCanvas.width; x++) {
-          const idx = (y * offCanvas.width + x) * 4;
-          if (offCtx.isPointInPath(x, y)) {
-            const r = data[idx];
-            const g = data[idx + 1];
-            const b = data[idx + 2];
-            const brightness = (r + g + b) / 3;
-            totalBrightness += brightness;
-            pixelCount++;
-            // Detect spots (dark areas)
-            if (brightness < 70) {
-              spotCount++;
-            }
-            // Calculate texture variation
-            if (x > 0) {
-              const prevIdx = (y * offCanvas.width + (x - 1)) * 4;
-              const prevBrightness = (data[prevIdx] + data[prevIdx + 1] + data[prevIdx + 2]) / 3;
-              textureVariation += Math.abs(brightness - prevBrightness);
-            }
+    for (let y = 0; y < offCanvas.height; y++) {
+      for (let x = 0; x < offCanvas.width; x++) {
+        const idx = (y * offCanvas.width + x) * 4;
+        if (offCtx.isPointInPath(x, y)) {
+          const r = data[idx];
+          const g = data[idx + 1];
+          const b = data[idx + 2];
+          const brightness = (r + g + b) / 3;
+          totalBrightness += brightness;
+          pixelCount++;
+          // Detect spots (dark areas)
+          if (brightness < 70) {
+            spotCount++;
+          }
+          // Calculate texture variation
+          if (x > 0) {
+            const prevIdx = (y * offCanvas.width + (x - 1)) * 4;
+            const prevBrightness = (data[prevIdx] + data[prevIdx + 1] + data[prevIdx + 2]) / 3;
+            textureVariation += Math.abs(brightness - prevBrightness);
           }
         }
       }
-      offCtx.restore();
+    }
+    offCtx.restore();
 
-      return {
-        averageBrightness: totalBrightness / (pixelCount || 1),
-        spotCount,
-        textureVariation: textureVariation / (pixelCount || 1),
-        pixelCount
-      };
+    return {
+      averageBrightness: totalBrightness / (pixelCount || 1),
+      spotCount,
+      textureVariation: textureVariation / (pixelCount || 1),
+      pixelCount
     };
-
-    initializeFaceMesh().catch(err => {
-      if (mounted) {
-        console.error('Initialization error:', err);
-        setError(err.message);
-        setIsLoading(false);
-      }
-    });
-
-    return () => {
-      mounted = false;
-      if (camera) {
-        try {
-          camera.stop();
-        } catch (err) {
-          console.error('Error stopping camera:', err);
-        }
-      }
-      if (faceMesh) {
-        try {
-          faceMesh.close();
-        } catch (err) {
-          console.error('Error closing face mesh:', err);
-        }
-      }
-    };
-  }, []);
+  };
 
   if (isLoading) {
     return (
@@ -423,7 +398,7 @@ function App() {
                 ref={videoRef}
                 autoPlay
                 playsInline
-                style={{ width: '100%', borderRadius: '12px', background: '#23263a' }}
+                style={{ width: '100%', borderRadius: '12px', background: '#23263a', transform: 'scaleX(-1)' }}
               />
               <canvas
                 ref={canvasRef}
@@ -434,7 +409,8 @@ function App() {
                   width: '100%',
                   height: '100%',
                   borderRadius: '12px',
-                  pointerEvents: 'none'
+                  pointerEvents: 'none',
+                  transform: 'scaleX(-1)'
                 }}
               />
             </Paper>
