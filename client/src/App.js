@@ -144,7 +144,35 @@ function App() {
         </Box>
       )}
 
-      <Typography variant="h3" align="center" gutterBottom>Lunera - Real-time Skin Analysis</Typography>
+      <Typography 
+        variant="h3" 
+        align="center" 
+        gutterBottom 
+        sx={{ 
+          fontFamily: 'benton-modern-font-family',
+          fontWeight: 700,
+          fontSize: { xs: '4rem', sm: '4.5rem', md: '5rem' },
+          mb: 1,
+          mt: -1
+        }}
+      >
+        lunera
+      </Typography>
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 2 }}>
+        <Typography variant="subtitle1" sx={{ mb: 0.5 }}>Skin Test by</Typography>
+        <Typography 
+          variant="subtitle1" 
+          sx={{ 
+            backgroundColor: '#F3E5F5',
+            color: '#C2185B',
+            padding: '2px 12px',
+            borderRadius: '4px',
+            fontWeight: 600
+          }}
+        >
+          Canto Manto
+        </Typography>
+      </Box>
       {error && <Paper sx={{p:2,mb:3,backgroundColor:'error.dark'}}><Typography color="#fff" align="center">{error}</Typography></Paper>}
       {!error && !faceDetected && !isLoading && <Typography align="center" sx={{mb:2}}>No face detected. Please align yourself.</Typography>}
 
@@ -157,19 +185,24 @@ function App() {
         </Grid>
 
         <Grid item xs={12} md={6}>
-          <Paper sx={{p:3,height:{xs:300,md:500}}}>
-            <Typography variant="h5" gutterBottom>Analysis Results</Typography>
+          <Paper sx={{p:2,height:{xs:270,md:500}}}>
+            <Typography variant="h5" gutterBottom align="center">Analysis Results</Typography>
             {['spots','wrinkles','acne','darkCircles','overallHealth'].map(k=>(
-              <Box key={k} sx={{mt:2}}>
-                <Typography variant="h6" sx={{mb:1}}>{`${k.charAt(0).toUpperCase()+k.slice(1)}: ${analysis[k].toFixed(1)}%`}</Typography>
+              <Box key={k} sx={{mt:1.4}}>
+                <Typography variant="h6" sx={{mb:0.6}}>{`${k.charAt(0).toUpperCase()+k.slice(1)}: ${analysis[k].toFixed(1)}%`}</Typography>
                 <Box className="analysis-bar">
                   <Box 
                     className="analysis-bar-inner" 
                     sx={{
                       width: `${analysis[k]}%`,
                       transition: 'width 0.3s ease-in-out',
-                      height: '20px',
-                      backgroundColor: '#4CAF50',
+                      height: '16px',
+                      backgroundColor: k === 'overallHealth' 
+                        ? '#4CAF50'
+                        : k === 'spots' ? '#FFB74D'
+                        : k === 'wrinkles' ? '#BA68C8'
+                        : k === 'acne' ? '#F48FB1'
+                        : '#64B5F6',
                       borderRadius: '4px'
                     }} 
                   />
