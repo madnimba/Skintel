@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Box, Container, Typography, Paper, Grid, CircularProgress } from '@mui/material';
 import './App.css';
+import './fonts.css';
 
 function App() {
   const videoRef = useRef(null);
@@ -149,7 +150,7 @@ function App() {
         align="center" 
         gutterBottom 
         sx={{ 
-          fontFamily: 'benton-modern-font-family',
+          fontFamily: 'Benton Modern',
           fontWeight: 700,
           fontSize: { xs: '4rem', sm: '4.5rem', md: '5rem' },
           mb: 1,
@@ -185,7 +186,7 @@ function App() {
         </Grid>
 
         <Grid item xs={12} md={6}>
-          <Paper sx={{p:2,height:{xs:270,md:500}}}>
+          <Paper sx={{p:2,height:{xs:280,md:500}}}>
             <Typography variant="h5" gutterBottom align="center">Analysis Results</Typography>
             {['spots','wrinkles','acne','darkCircles','overallHealth'].map(k=>(
               <Box key={k} sx={{mt:1.4}}>
