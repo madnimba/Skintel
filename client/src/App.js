@@ -95,7 +95,7 @@ function App() {
     return {
       spots: (allA.spots/allA.count)*30,
       wrinkles: Math.min(30,((analyzeRegion(regions.forehead).texVar+analyzeRegion(regions.underEyes).texVar)/2)*0.6),
-      acne: (analyzeRegion(regions.cheeks).spots/analyzeRegion(regions.cheeks).count)*30,
+      acne: Math.min(30, ((analyzeRegion(regions.cheeks).spots/analyzeRegion(regions.cheeks).count)*30) + 1),
       darkCircles: Math.min(30,(100-(analyzeRegion(regions.underEyes).avgB/255)*100)*0.3)
     };
   };
